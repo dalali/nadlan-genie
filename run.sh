@@ -172,9 +172,9 @@ cmd_scan() {
     status=$(echo "$resp" | python3 -c "import sys,json; print(json.load(sys.stdin)['status'])")
     attempts=$((attempts + 1))
     printf "  [%ds] status: %s\r" "$((attempts * 2))" "$status"
-    if [ $attempts -ge 30 ]; then
+    if [ $attempts -ge 150 ]; then
       echo ""
-      echo "✗ Timed out waiting for scan to complete" >&2
+      echo "✗ Timed out after 5 minutes waiting for scan to complete" >&2
       exit 1
     fi
   done
