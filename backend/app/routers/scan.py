@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import uuid
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from ..deps import get_db
@@ -23,9 +23,13 @@ log = get_logger(__name__)
 
 router = APIRouter(tags=["scan"])
 
+# Keep a strong reference to background tasks so they are not garbage-collected
+# mid-flight (asyncio holds only weak refs to tasks created via create_task).
+_BACKGROUND_TASKS: set[asyncio.Task] = set()
+
 
 @router.post("/scan", response_model=ScanCreated, status_code=202)
-def create_scan(payload: ScanRequest, db: Session = Depends(get_db)) -> ScanCreated:
+async def create_scan(payload: ScanRequest, db: Session = Depends(get_db)) -> ScanCreated:
     filters = payload.model_dump()
     scan = ScanRun(
         id=uuid.uuid4(),
@@ -35,9 +39,11 @@ def create_scan(payload: ScanRequest, db: Session = Depends(get_db)) -> ScanCrea
     db.add(scan)
     db.commit()
     db.refresh(scan)
-    # Schedule the actual work on the event loop. We do not use FastAPI BackgroundTasks because we
-    # want to detach from the request lifecycle entirely.
-    asyncio.create_task(run_scan(scan.id, filters))
+    # Endpoint is async so the running event loop is available. Detach the scan task from the
+    # request lifecycle (we do not await it). Keep a strong reference so GC does not drop it.
+    task = asyncio.create_task(run_scan(scan.id, filters))
+    _BACKGROUND_TASKS.add(task)
+    task.add_done_callback(_BACKGROUND_TASKS.discard)
     return ScanCreated(scan_id=scan.id, status="queued")
 
 
