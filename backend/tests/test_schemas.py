@@ -31,3 +31,15 @@ def test_scan_request_rejects_zero_price():
 def test_scan_request_rejects_unknown_property_type():
     with pytest.raises(ValidationError):
         ScanRequest(city="X", price_max=1_000_000, property_type="land")
+
+
+def test_scan_request_rejects_negative_discount_threshold():
+    # QA MEDIUM-6: a negative discount means "show listings priced above market",
+    # which is nonsensical for an undervalued-property finder.
+    with pytest.raises(ValidationError):
+        ScanRequest(city="X", price_max=1_000_000, discount_threshold=-0.1)
+
+
+def test_scan_request_accepts_zero_discount_threshold():
+    r = ScanRequest(city="X", price_max=1_000_000, discount_threshold=0.0)
+    assert r.discount_threshold == 0.0

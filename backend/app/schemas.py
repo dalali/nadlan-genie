@@ -19,7 +19,7 @@ class ScanRequest(BaseModel):
     rooms_min: float = Field(1, ge=1, le=10)
     rooms_max: float = Field(10, ge=1, le=10)
     price_max: int = Field(..., gt=0, le=50_000_000)
-    discount_threshold: float = Field(0.15, ge=-1.0, le=1.0)
+    discount_threshold: float = Field(0.15, ge=0.0, le=1.0)
     max_pages: int = Field(3, ge=1, le=3)
     property_type: PropertyType = "apartment"
 
