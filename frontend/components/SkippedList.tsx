@@ -36,7 +36,7 @@ export function SkippedList({ items }: { items: SkippedItem[] }) {
                     <a
                       href={it.url}
                       target="_blank"
-                      rel="noopener"
+                      rel="noopener noreferrer"
                       className="text-slate-600 hover:text-slate-900 hover:underline"
                     >
                       {it.url}

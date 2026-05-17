@@ -82,7 +82,7 @@ export function ResultTable({ results }: { results: ScanResultOut[] }) {
                   <a
                     href={r.listing.url}
                     target="_blank"
-                    rel="noopener"
+                    rel="noopener noreferrer"
                     className="text-emerald-700 hover:underline"
                   >
                     {r.listing.address ||

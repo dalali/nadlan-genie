@@ -18,7 +18,7 @@ export function Header({ version }: { version?: string }) {
           <a
             href="https://github.com/dalali/nadlan-genie"
             target="_blank"
-            rel="noopener"
+            rel="noopener noreferrer"
             className="hover:text-slate-900"
           >
             GitHub
@@ -26,7 +26,7 @@ export function Header({ version }: { version?: string }) {
           <a
             href="/api/health"
             target="_blank"
-            rel="noopener"
+            rel="noopener noreferrer"
             className="hover:text-slate-900"
           >
             health
