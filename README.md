@@ -13,6 +13,12 @@ by comparing live listings against locally stored Israeli transaction (sales) da
 ```bash
 git clone https://github.com/dalali/nadlan-genie
 cd nadlan-genie
+make up        # auto-copies .env.example -> .env if missing, then docker compose up --build
+```
+
+If you prefer to invoke docker compose directly, copy the env file first:
+
+```bash
 cp .env.example .env
 docker compose up --build
 ```
@@ -70,7 +76,8 @@ docs/       PRD, design, architecture
 
 | Target | What it does |
 |--------|--------------|
-| `make up` | `docker compose up --build` |
+| `make env` | Copy `.env.example` to `.env` if missing |
+| `make up` (alias: `make dev`) | Ensure `.env` exists, then `docker compose up --build` |
 | `make up-d` | Same, detached |
 | `make down` | Stop and remove containers (keep volume) |
 | `make clean` | `docker compose down -v` (also removes the postgres volume) |
