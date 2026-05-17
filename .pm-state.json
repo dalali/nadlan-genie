@@ -45,7 +45,16 @@
       "qa-1-3": "6a09affa793179d85e04ae9d",
       "qa-1-4": "6a09affa71513459aabf0073",
       "qa-1-5": "6a09affbe1fe8aa990778900",
-      "qa-1-6": "6a09affc59e82284d0cdf6f9"
+      "qa-1-6": "6a09affc59e82284d0cdf6f9",
+      "qa-bug-high-1": "6a09d4d1cf5beadecdf70aa0",
+      "qa-bug-high-2": "6a09d4d2acd23d25b62c9dcc",
+      "qa-bug-med-3": "6a09d517fb4b95eb62d151ce",
+      "qa-bug-med-4": "6a09d4e68e4805ee79a03df4",
+      "qa-bug-med-5": "6a09d4e79f3410bfa0a9f5fb",
+      "qa-bug-med-6": "6a09d4e88084ea923cd2b57c",
+      "qa-bug-low-7": "6a09d4e88c20c1235f38262a",
+      "qa-bug-low-8": "6a09d4e9e4de4780e21c096e",
+      "qa-bug-low-9": "6a09d4eac7eb8c94e726c082"
     }
   },
   "branch": "feature/mvp-iteration-1",
@@ -89,6 +98,22 @@
       "city allow-list validation on /scan (NFR-9)",
       "import_path path-traversal guard (constrained to /data, /app/data)",
       "CORS narrowed to localhost origins"
-    ]
+    ],
+    "qa_bug_followup": {
+      "fixed_at": "2026-05-17",
+      "pushed_to_main": true,
+      "backend_tests_passing": 79,
+      "commits": [
+        "f9f5c61 fix(build): .env fallback via make env (HIGH-1)",
+        "f745528 fix(data): listing 1025 coords (HIGH-2)",
+        "6b05d35 fix(importer): xmax inserted vs updated (MEDIUM-3)",
+        "a8ccd81 fix(valuation): guard property_type=None (MEDIUM-4)",
+        "073dd12 refactor(db): drop duplicate get_db (MEDIUM-5)",
+        "4db91b6 fix(schema): discount_threshold ge=0.0 (MEDIUM-6)",
+        "ff72bbc fix(frontend): noreferrer on external links (LOW-7)",
+        "29cec6b test(scan): GET/DELETE /scan/{id} (LOW-8)",
+        "ba52cca docs: NEXT_PUBLIC_API_URL rebake note (LOW-9)"
+      ]
+    }
   }
 }
