@@ -4,11 +4,13 @@ import asyncio
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import distinct, select
 from sqlalchemy.orm import Session
 
 from ..deps import get_db
+from ..geo import SUPPORTED_CITIES
 from ..logging_setup import get_logger
-from ..models import Listing, ScanResult, ScanRun
+from ..models import Listing, ScanResult, ScanRun, Transaction
 from ..schemas import (
     ListingOut,
     ScanCreated,
@@ -18,6 +20,14 @@ from ..schemas import (
     SkippedItem,
 )
 from ..services.scan_runner import run_scan
+
+
+def _allowed_cities(db: Session) -> set[str]:
+    """Cities the user is allowed to scan: anything in the DB plus the hard-coded fallback."""
+    rows = db.execute(select(distinct(Transaction.city))).all()
+    cities = {r[0] for r in rows if r[0]}
+    cities.update(SUPPORTED_CITIES)
+    return cities
 
 log = get_logger(__name__)
 
@@ -31,6 +41,16 @@ _BACKGROUND_TASKS: set[asyncio.Task] = set()
 @router.post("/scan", response_model=ScanCreated, status_code=202)
 async def create_scan(payload: ScanRequest, db: Session = Depends(get_db)) -> ScanCreated:
     filters = payload.model_dump()
+    # NFR-9: validate the user-supplied city against the allow-list at the API edge.
+    allowed = _allowed_cities(db)
+    if filters["city"] not in allowed:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"city={filters['city']!r} is not supported. "
+                f"Allowed: {sorted(allowed)}."
+            ),
+        )
     scan = ScanRun(
         id=uuid.uuid4(),
         status="queued",

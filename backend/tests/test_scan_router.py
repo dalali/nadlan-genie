@@ -30,6 +30,13 @@ class _FakeSession:
     def refresh(self, _obj) -> None:
         pass
 
+    def execute(self, _stmt):  # noqa: ANN001
+        # Used by the city allow-list check; an empty DB falls back to SUPPORTED_CITIES.
+        class _Result:
+            def all(self_inner):
+                return []
+        return _Result()
+
 
 @pytest.fixture()
 def client(monkeypatch):

@@ -131,10 +131,34 @@ def import_csv(fileobj: IO[str], db: Session, *, batch_size: int = 500) -> dict[
     }
 
 
+# Directories from which `import_path` is allowed to read CSVs. Anything outside is rejected
+# to prevent the JSON `{path: ...}` mode from being abused as a file-disclosure primitive
+# (the API process can read e.g. /etc/passwd or /proc/<pid>/environ otherwise).
+ALLOWED_IMPORT_ROOTS: tuple[str, ...] = ("/data", "/app/data")
+
+
+def _is_under_allowed_root(p: Path) -> bool:
+    try:
+        resolved = p.resolve(strict=False)
+    except (OSError, RuntimeError):
+        return False
+    return any(
+        str(resolved).startswith(root.rstrip("/") + "/") or str(resolved) == root
+        for root in ALLOWED_IMPORT_ROOTS
+    )
+
+
 def import_path(path: str | Path, db: Session) -> dict[str, int]:
     p = Path(path)
+    if not _is_under_allowed_root(p):
+        raise ValueError(
+            f"Path {path!r} is outside the allowed roots {ALLOWED_IMPORT_ROOTS}. "
+            "Place the CSV under /data (mounted from backend/data) or upload it as multipart."
+        )
     if not p.exists():
         raise FileNotFoundError(f"CSV not found at {p}")
+    if p.is_dir():
+        raise ValueError(f"Path {path!r} is a directory, not a CSV file.")
     with p.open("r", encoding="utf-8") as f:
         return import_csv(f, db)
 

@@ -34,8 +34,14 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # local-only app; origin restriction is moot here.
-    allow_methods=["*"],
+    # Local-only app. Restrict to the frontend dev/prod localhost origins so a stray browser
+    # tab on another site cannot trigger scans against this user's local backend.
+    allow_origins=[
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+    ],
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
 
