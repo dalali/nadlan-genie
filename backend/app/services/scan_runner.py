@@ -167,6 +167,7 @@ async def run_scan(scan_id: uuid.UUID, filters: dict[str, Any]) -> None:
         except Exception as exc:  # noqa: BLE001
             log.exception("scan.error", scan_id=str(scan_id))
             try:
+                db.rollback()  # clear any aborted transaction before writing error status
                 _update_run(
                     db,
                     scan_id,

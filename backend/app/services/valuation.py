@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from datetime import date, timedelta
 
 from geoalchemy2 import Geography
+from shapely import from_wkb
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -30,6 +31,18 @@ class Valuation:
     radius_m: int
     confidence: str
     discount_percent: float
+
+
+def _listing_point(listing: Listing):
+    """Return a PostGIS ST_MakePoint expression for a listing's coordinates.
+
+    listing.geom is a GeoAlchemy2 WKBElement. Passing it as a bound parameter
+    causes SQLAlchemy to wrap it in ST_GeogFromText(), which expects WKT — not
+    the EWKB hex string that WKBElement serialises to. Instead, decode the EWKB
+    via Shapely and reconstruct a clean ST_SetSRID(ST_MakePoint(lon, lat), 4326).
+    """
+    point = from_wkb(bytes.fromhex(str(listing.geom)))
+    return func.ST_SetSRID(func.ST_MakePoint(point.x, point.y), 4326)
 
 
 def _trimmed_median(values: list[float], trim_frac: float = 0.05) -> float:
@@ -86,7 +99,7 @@ def value_listing(listing: Listing, db: Session, *, today: date | None = None) -
         q = base_q.where(
             func.ST_DWithin(
                 func.cast(Transaction.geom, Geography),
-                func.cast(listing.geom, Geography),
+                func.cast(_listing_point(listing), Geography),
                 radius_m,
             )
         )
