@@ -25,6 +25,7 @@ class Settings(BaseSettings):
     log_level: str = Field("INFO", alias="LOG_LEVEL")
 
     # --- Path to bundled seed CSV (inside container) ---
+    # Defaults match the COPY layout in backend/Dockerfile where the data/ dir is copied to /app/data.
     seed_csv_path: str = Field("/app/data/sample_transactions.csv", alias="SEED_CSV_PATH")
     sample_listings_path: str = Field(
         "/app/data/sample_listings.json", alias="SAMPLE_LISTINGS_PATH"
