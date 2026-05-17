@@ -49,6 +49,17 @@ def value_listing(listing: Listing, db: Session, *, today: date | None = None) -
         return None
     if listing.geom is None:
         return None
+    # property_type is a hard filter in the comparable query: passing None
+    # turns it into ``WHERE property_type IS NULL``, which silently produces
+    # zero matches. Exit early with a warning so callers can mark the listing
+    # as skipped rather than treat "no comparables" as a valuation failure.
+    if listing.property_type is None:
+        log.warning(
+            "valuation.skipped_missing_property_type",
+            listing_id=getattr(listing, "id", None),
+            url=getattr(listing, "url", None),
+        )
+        return None
 
     sqm = float(listing.sqm)
     rooms = float(listing.rooms)
