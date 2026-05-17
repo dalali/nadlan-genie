@@ -6,9 +6,10 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import IO, Any
 
-from sqlalchemy import func, select
+from sqlalchemy import cast, func, literal_column, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
+from sqlalchemy.types import Text
 
 from ..config import get_settings
 from ..db import SessionLocal
@@ -88,6 +89,10 @@ def import_csv(fileobj: IO[str], db: Session, *, batch_size: int = 500) -> dict[
             stmt = pg_insert(Transaction).values(
                 **item, geom=func.ST_GeomFromEWKT(wkt)
             )
+            # Postgres xmax trick: on INSERT, the system column xmax is 0;
+            # on UPDATE (i.e. ON CONFLICT DO UPDATE fired), xmax holds the
+            # current transaction id (non-zero). Returning it lets us
+            # distinguish inserted vs updated rows.
             stmt = stmt.on_conflict_do_update(
                 index_elements=["deal_id", "deal_date"],
                 set_={
@@ -101,10 +106,24 @@ def import_csv(fileobj: IO[str], db: Session, *, batch_size: int = 500) -> dict[
                     "price": stmt.excluded.price,
                     "geom": stmt.excluded.geom,
                 },
-            ).returning(Transaction.id)
+            ).returning(
+                Transaction.id,
+                cast(literal_column("xmax"), Text).label("xmax_text"),
+            )
             res = db.execute(stmt)
-            if res.first() is not None:
-                inserted += 1
+            row = res.first()
+            if row is not None:
+                # xmax == '0' means the row was newly inserted; any other
+                # value means the existing row was updated. Fall back to
+                # treating the row as inserted if the driver/stub does not
+                # expose xmax_text (e.g. unit-test fake sessions).
+                xmax_val = getattr(row, "xmax_text", None)
+                if xmax_val is None and hasattr(row, "_mapping"):
+                    xmax_val = row._mapping.get("xmax_text")
+                if xmax_val is not None and xmax_val != "0":
+                    updated += 1
+                else:
+                    inserted += 1
 
     for row in reader:
         total += 1
@@ -120,9 +139,6 @@ def import_csv(fileobj: IO[str], db: Session, *, batch_size: int = 500) -> dict[
     _flush(batch)
     db.commit()
 
-    # Approximate updated count: for MVP, we report inserted = unique rows successfully written
-    # and updated = 0 unless the table already had matching deal_ids. We could compute via xmax
-    # but this is enough for the UX summary.
     return {
         "inserted": inserted,
         "updated": updated,
