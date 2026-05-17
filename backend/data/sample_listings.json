@@ -321,8 +321,8 @@
     "price": 1761000,
     "property_type": "apartment",
     "url": "https://example.com/sample/listing/1025",
-    "lat": 32.125675,
-    "lon": 34.828971
+    "lat": 32.0860,
+    "lon": 34.8190
   },
   {
     "id": 1026,
