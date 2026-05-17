@@ -53,6 +53,23 @@ app is functional out-of-the-box.
 - Single-user, single-process. No auth, no multi-tenant.
 - English UI. Hebrew RTL is deferred to v2.
 
+## Configuration notes
+
+- **`NEXT_PUBLIC_API_URL` is baked in at frontend build time.** Next.js inlines all
+  `NEXT_PUBLIC_*` variables into the static client bundle when `next build` runs inside the
+  frontend Docker image. Editing `NEXT_PUBLIC_API_URL` in `.env` after the first `docker compose
+  up --build` will **not** take effect on the running container — you must rebuild the frontend
+  image:
+
+  ```bash
+  docker compose build frontend && docker compose up -d frontend
+  # or simply
+  make clean && make up
+  ```
+
+  Backend-only variables (e.g. `DATABASE_URL`, `LISTING_SOURCE`) are read at process startup
+  and only need a container restart, not a rebuild.
+
 ## Architecture
 
 See [`docs/architecture.md`](docs/architecture.md). TL;DR: Next.js 14 frontend, FastAPI backend,
