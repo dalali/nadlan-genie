@@ -1,7 +1,7 @@
 {
   "project": "nadlan-genie",
   "request": "Local-first MVP web app to identify potentially undervalued residential real-estate listings in Israel. Single-city on-demand scans, scrape one listing source, compare vs locally stored Israeli transaction data, deterministic valuation (no LLM, no paid APIs, no cloud). FastAPI + Next.js + Postgres/PostGIS + Docker Compose.",
-  "phase": "prd",
+  "phase": "coding",
   "iteration": 1,
   "trello": {
     "boardId": "6a097a7cff1e28ad4294feb2",
@@ -32,10 +32,17 @@
       "coding": "6a097ac05eed78a72ec026ac",
       "code-review": "6a097ac0efeca5c26b36c527",
       "qa": "6a097ac18ac358c2f9eca0a0",
-      "security": "6a097ac2e9fda5750d356550"
+      "security": "6a097ac2e9fda5750d356550",
+      "coding-1-1": "6a097eaa1add3379594f4b36",
+      "coding-1-2": "6a097eabcf6acb7321e33d8b",
+      "coding-1-3": "6a097eabee3381d76be7ba1a",
+      "coding-1-4": "6a097eac4611fea87e007de7",
+      "coding-1-5": "6a097ead97315292823deea4",
+      "coding-1-6": "6a097eada8450d9ad1ee4a24",
+      "coding-1-7": "6a097eae82dd4d187facbf00"
     }
   },
-  "branch": "",
+  "branch": "feature/mvp-iteration-1",
   "artifacts": {
     "prd": "docs/PRD.md",
     "design": "docs/design.md",
