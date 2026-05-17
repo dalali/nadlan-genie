@@ -1,0 +1,51 @@
+{
+  "project": "nadlan-genie",
+  "request": "Local-first MVP web app to identify potentially undervalued residential real-estate listings in Israel. Single-city on-demand scans, scrape one listing source, compare vs locally stored Israeli transaction data, deterministic valuation (no LLM, no paid APIs, no cloud). FastAPI + Next.js + Postgres/PostGIS + Docker Compose.",
+  "phase": "prd",
+  "iteration": 1,
+  "trello": {
+    "boardId": "6a097a7cff1e28ad4294feb2",
+    "boardUrl": "https://trello.com/b/fNK1Ayw7",
+    "lists": {
+      "backlog": "6a097a89397598ed1030cc7e",
+      "prioritized": "6a097a8845c2d388600eae76",
+      "wip": "6a097a8867587d79b7a6a15b",
+      "review": "6a097a888a01af8a01f83ff5",
+      "test": "6a097a87e71f35f44f4a6539",
+      "done": "6a097a87f5e8abeb32fd4b89"
+    },
+    "labels": {
+      "coding": "6a097a7dff1e28ad4294fec7",
+      "qa-engineer": "6a097a7dff1e28ad4294fec8",
+      "code-review": "6a097a7dff1e28ad4294fec9",
+      "security-analyst": "6a097a7dff1e28ad4294feca",
+      "systems-architect": "6a097a7dff1e28ad4294fecb",
+      "systems-analyst": "6a097a7dff1e28ad4294fecc",
+      "ui-ux-designer": "6a097aa3bdf185cc6cb86d55",
+      "project-manager": "6a097aa37f3f1b0798e65a81"
+    },
+    "cards": {
+      "epic": "6a097abce718993dcfde8969",
+      "prd": "6a097abcbabb5085acf34770",
+      "design": "6a097abdbe7fef9d86fa0d39",
+      "architecture": "6a097abe20aa094cad685a64",
+      "coding": "6a097ac05eed78a72ec026ac",
+      "code-review": "6a097ac0efeca5c26b36c527",
+      "qa": "6a097ac18ac358c2f9eca0a0",
+      "security": "6a097ac2e9fda5750d356550"
+    }
+  },
+  "branch": "",
+  "artifacts": {
+    "prd": "docs/PRD.md",
+    "design": "docs/design.md",
+    "architecture": "docs/architecture.md"
+  },
+  "issues": [],
+  "status": "running",
+  "github": {
+    "repo": "dalali/nadlan-genie",
+    "url": "https://github.com/dalali/nadlan-genie"
+  },
+  "trello_credentials_source": "/home/node/.claude/.claude.json"
+}
