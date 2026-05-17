@@ -1,7 +1,7 @@
 {
   "project": "nadlan-genie",
   "request": "Local-first MVP web app to identify potentially undervalued residential real-estate listings in Israel. Single-city on-demand scans, scrape one listing source, compare vs locally stored Israeli transaction data, deterministic valuation (no LLM, no paid APIs, no cloud). FastAPI + Next.js + Postgres/PostGIS + Docker Compose.",
-  "phase": "code-review",
+  "phase": "done",
   "iteration": 1,
   "trello": {
     "boardId": "6a097a7cff1e28ad4294feb2",
@@ -39,20 +39,56 @@
       "coding-1-4": "6a097eac4611fea87e007de7",
       "coding-1-5": "6a097ead97315292823deea4",
       "coding-1-6": "6a097eada8450d9ad1ee4a24",
-      "coding-1-7": "6a097eae82dd4d187facbf00"
+      "coding-1-7": "6a097eae82dd4d187facbf00",
+      "qa-1-1": "6a09aff850af02d520ca981a",
+      "qa-1-2": "6a09aff93b96c0327c1437a1",
+      "qa-1-3": "6a09affa793179d85e04ae9d",
+      "qa-1-4": "6a09affa71513459aabf0073",
+      "qa-1-5": "6a09affbe1fe8aa990778900",
+      "qa-1-6": "6a09affc59e82284d0cdf6f9"
     }
   },
   "branch": "feature/mvp-iteration-1",
   "artifacts": {
     "prd": "docs/PRD.md",
     "design": "docs/design.md",
-    "architecture": "docs/architecture.md"
+    "architecture": "docs/architecture.md",
+    "qa_plan": "docs/QA-plan.md",
+    "security_review": "docs/security-review.md"
   },
   "issues": [],
-  "status": "running",
+  "status": "complete",
   "github": {
     "repo": "dalali/nadlan-genie",
     "url": "https://github.com/dalali/nadlan-genie"
   },
-  "trello_credentials_source": "/home/node/.claude/.claude.json"
+  "trello_credentials_source": "/home/node/.claude/.claude.json",
+  "summary": {
+    "merged_at": "2026-05-17",
+    "merge_strategy": "no-ff",
+    "feature_branch": "feature/mvp-iteration-1",
+    "merge_target": "main",
+    "backend_tests_passing": 69,
+    "phases_completed": [
+      "init",
+      "prd",
+      "design",
+      "architecture",
+      "coding",
+      "code-review",
+      "qa",
+      "security",
+      "pm-review",
+      "done"
+    ],
+    "code_review_blockers_fixed": [
+      "scan endpoint was sync; asyncio.create_task would fail at runtime",
+      "import-transactions read full upload into RAM; violated US-4 streaming"
+    ],
+    "security_fixes": [
+      "city allow-list validation on /scan (NFR-9)",
+      "import_path path-traversal guard (constrained to /data, /app/data)",
+      "CORS narrowed to localhost origins"
+    ]
+  }
 }
