@@ -21,7 +21,7 @@ Commands:
   test          Run the backend test suite inside a one-off container
   psql          Open a psql shell on the Postgres container
   shell         Open a bash shell on the backend container
-  scan          Fire a test scan against Ramat Gan (requires services to be up)
+  scan          Run a scan: ./run.sh scan [city] [rooms_min] [rooms_max] [price_max] [threshold]
   import        Import a transaction CSV: ./run.sh import /path/to/file.csv
   clean         Stop services and delete all volumes (wipes DB)
   help          Show this message
@@ -30,7 +30,10 @@ Examples:
   ./run.sh start               # first-time setup: builds & starts everything
   ./run.sh up                  # start in background
   ./run.sh logs backend        # tail backend logs only
-  ./run.sh scan                # test scan: Ramat Gan, 3-4 rooms, max ₪3M
+  ./run.sh scan                          # default: Ramat Gan, 3-4 rooms, <=3M, 20%
+  ./run.sh scan "Tel Aviv"               # Tel Aviv with defaults
+  ./run.sh scan "Jerusalem" 2 3 2500000  # Jerusalem, 2-3 rooms, <=2.5M
+  ./run.sh scan "Haifa" 3 4 2000000 0.15 # Haifa, custom threshold
   ./run.sh import ./data.csv   # load real transaction data
 EOF
 }
@@ -134,16 +137,25 @@ cmd_shell() {
 }
 
 cmd_scan() {
+  local city="${1:-Ramat Gan}"
+  local rooms_min="${2:-3}"
+  local rooms_max="${3:-4}"
+  local price_max="${4:-3000000}"
+  local threshold="${5:-0.2}"
+
   require_running
   local url
   url="$(backend_url)/scan"
-  echo "→ Firing test scan: Ramat Gan, 3-4 rooms, max ₪3,000,000, 20% threshold…"
+  echo "→ Scanning: $city | rooms ${rooms_min}-${rooms_max} | max ₪$(printf '%,.0f' "$price_max") | ${threshold} discount threshold…"
   echo ""
+
+  local body
+  body=$(python3 -c "import json; print(json.dumps({'city':'$city','rooms_min':$rooms_min,'rooms_max':$rooms_max,'price_max':$price_max,'max_pages':3,'discount_threshold':$threshold}))")
 
   local scan_id
   scan_id=$(curl -sf -X POST "$url" \
     -H "Content-Type: application/json" \
-    -d '{"city":"Ramat Gan","rooms_min":3,"rooms_max":4,"price_max":3000000,"max_pages":3,"discount_threshold":0.2}' \
+    -d "$body" \
     | python3 -c "import sys,json; print(json.load(sys.stdin)['scan_id'])")
 
   echo "  Scan ID: $scan_id"
@@ -237,7 +249,7 @@ case "$COMMAND" in
   test)     cmd_test ;;
   psql)     cmd_psql ;;
   shell)    cmd_shell ;;
-  scan)     cmd_scan ;;
+  scan)     cmd_scan "$@" ;;
   import)   cmd_import "$@" ;;
   clean)    cmd_clean ;;
   help|--help|-h) usage ;;
