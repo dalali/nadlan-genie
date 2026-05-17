@@ -1,7 +1,7 @@
 {
   "project": "nadlan-genie",
   "request": "Local-first MVP web app to identify potentially undervalued residential real-estate listings in Israel. Single-city on-demand scans, scrape one listing source, compare vs locally stored Israeli transaction data, deterministic valuation (no LLM, no paid APIs, no cloud). FastAPI + Next.js + Postgres/PostGIS + Docker Compose.",
-  "phase": "coding",
+  "phase": "code-review",
   "iteration": 1,
   "trello": {
     "boardId": "6a097a7cff1e28ad4294feb2",
