@@ -146,7 +146,9 @@ cmd_scan() {
   require_running
   local url
   url="$(backend_url)/scan"
-  echo "→ Scanning: $city | rooms ${rooms_min}-${rooms_max} | max ₪$(printf '%,.0f' "$price_max") | ${threshold} discount threshold…"
+  local price_fmt
+  price_fmt=$(python3 -c "print(f'{$price_max:,.0f}')")
+  echo "→ Scanning: $city | rooms ${rooms_min}-${rooms_max} | max ₪${price_fmt} | ${threshold} discount threshold…"
   echo ""
 
   local body
