@@ -4,7 +4,8 @@ import codecs
 import os
 import tempfile
 
-from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Depends, HTTPException, Request
+from starlette.datastructures import UploadFile
 from sqlalchemy.orm import Session
 
 from ..deps import get_db
