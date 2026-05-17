@@ -1,9 +1,7 @@
 from __future__ import annotations
 
-from collections.abc import Iterator
-
 from sqlalchemy import create_engine
-from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
+from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
 from .config import get_settings
 
@@ -24,10 +22,5 @@ engine = create_engine(
 
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
 
-
-def get_db() -> Iterator[Session]:
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
+# Note: ``get_db`` (FastAPI dependency that yields a Session) lives in ``app.deps``
+# to avoid duplicate definitions. Import it from there in routers.
