@@ -181,28 +181,36 @@ cmd_scan() {
 
   echo ""
   echo ""
-  curl -sf "$(backend_url)/results?scan_id=$scan_id" | python3 -c "
+  curl -sf "$(backend_url)/scan/$scan_id" | python3 -c "
 import sys, json
 
 data = json.load(sys.stdin)
-results = data if isinstance(data, list) else data.get('results', [])
+results = data.get('results', [])
+skipped = data.get('skipped', [])
 
 if not results:
     print('No qualifying listings found.')
+    if skipped:
+        reasons = {}
+        for s in skipped:
+            reasons[s['reason']] = reasons.get(s['reason'], 0) + 1
+        for reason, count in sorted(reasons.items()):
+            print(f'  {count} listing(s) skipped: {reason}')
     sys.exit(0)
 
 print(f'Found {len(results)} qualifying deal(s):')
 print()
 for r in results:
-    print(f'  Address  : {r.get(\"address\") or r.get(\"listing\", {}).get(\"address\", \"N/A\")}')
-    print(f'  Asking   : ₪{r.get(\"asking_price\", r.get(\"price\", 0)):,.0f}  ({r.get(\"sqm\", \"?\")} m²  {r.get(\"rooms\", \"?\")} rooms)')
-    ppsqm = r.get(\"asking_price_per_sqm\") or r.get(\"price_per_sqm\", 0)
-    est_ppsqm = r.get(\"estimated_price_per_sqm\", 0)
-    print(f'  ₪/m²     : asking {ppsqm:,.0f}  vs  market {est_ppsqm:,.0f}')
+    l = r.get('listing', {})
+    asking  = r.get('asking_price', 0)
+    sqm     = l.get('sqm') or 1
+    print(f'  #{r[\"rank\"]}  {l.get(\"address\", \"N/A\")}')
+    print(f'  Asking   : ₪{asking:,.0f}  ({sqm} m²  {l.get(\"rooms\", \"?\")} rooms)')
+    print(f'  ₪/m²     : asking {asking/sqm:,.0f}  vs  market {r.get(\"median_ppsqm\", 0):,.0f}')
     print(f'  Est value: ₪{r.get(\"estimated_value\", 0):,.0f}')
     print(f'  Discount : {r.get(\"discount_percent\", 0) * 100:.1f}%')
     print(f'  Confidence: {r.get(\"confidence\", \"?\")}  ({r.get(\"comparable_count\", \"?\")} comparables)')
-    print(f'  URL      : {r.get(\"url\", \"N/A\")}')
+    print(f'  URL      : {l.get(\"url\", \"N/A\")}')
     print()
 "
 }
