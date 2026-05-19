@@ -117,12 +117,46 @@ def _make_session() -> Any:
 
 
 def _warm_session(session: Any) -> None:
-    """Visit the Yad2 homepage to acquire session cookies."""
+    """Visit the Yad2 homepage to acquire initial session cookies."""
     try:
         session.get("https://www.yad2.co.il/", timeout=15)
         logger.debug("Yad2 session warmed up, cookies: %s", list(session.cookies.keys()))
     except Exception as exc:
         logger.warning("Yad2 session warmup failed (continuing anyway): %s", exc)
+
+
+def _login(session: Any, email: str, password: str) -> bool:
+    """Authenticate with Yad2 and store the session cookie. Returns True on success."""
+    try:
+        # Step 1: load login page to get CSRF / initial cookies
+        session.get("https://www.yad2.co.il/auth/login", timeout=15)
+
+        # Step 2: POST credentials to the auth API
+        payload = {"email": email, "password": password}
+        resp = session.post(
+            "https://www.yad2.co.il/api/user/login",
+            json=payload,
+            headers={**_API_HEADERS, "Referer": "https://www.yad2.co.il/auth/login"},
+            timeout=15,
+        )
+        logger.debug("Yad2 login response: %d %s", resp.status_code, resp.text[:200])
+
+        if resp.status_code == 200:
+            data = resp.json() if resp.content else {}
+            # Success: response typically contains user info
+            if data.get("success") or data.get("user") or data.get("token"):
+                logger.info("Yad2 login succeeded for %s", email)
+                return True
+            # Some versions return 200 with error body
+            logger.warning("Yad2 login 200 but unexpected body: %s", resp.text[:300])
+            return False
+
+        logger.warning("Yad2 login failed: HTTP %d — %s", resp.status_code, resp.text[:300])
+        return False
+
+    except Exception as exc:
+        logger.warning("Yad2 login error: %s", exc)
+        return False
 
 
 def _search_url(city_id: str, rooms_min: float, rooms_max: float,
@@ -239,9 +273,17 @@ class Yad2Adapter(ListingAdapter):
         prop_code = PROPERTY_TYPE_MAP.get(property_type.lower(), "1")
         loop = asyncio.get_event_loop()
 
-        # Warm up session in thread pool (blocking I/O)
+        # Warm up session and optionally log in
         session = await loop.run_in_executor(None, _make_session)
         await loop.run_in_executor(None, _warm_session, session)
+
+        settings = get_settings()
+        if settings.yad2_email and settings.yad2_password:
+            ok = await loop.run_in_executor(
+                None, _login, session, settings.yad2_email, settings.yad2_password
+            )
+            if not ok:
+                logger.warning("Yad2 login failed — continuing as anonymous")
 
         all_listings: list[RawListing] = []
 

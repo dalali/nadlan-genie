@@ -24,6 +24,10 @@ class Settings(BaseSettings):
     auto_seed: bool = Field(True, alias="AUTO_SEED")
     log_level: str = Field("INFO", alias="LOG_LEVEL")
 
+    # --- Yad2 credentials (optional, enables authenticated scraping) ---
+    yad2_email: str = Field("", alias="YAD2_EMAIL")
+    yad2_password: str = Field("", alias="YAD2_PASSWORD")
+
     # --- Path to bundled seed CSV (inside container) ---
     # Defaults match the COPY layout in backend/Dockerfile where the data/ dir is copied to /app/data.
     seed_csv_path: str = Field("/app/data/sample_transactions.csv", alias="SEED_CSV_PATH")
