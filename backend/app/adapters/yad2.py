@@ -219,16 +219,19 @@ def _fetch_page_sync(session: Any, city_id: str, rooms_min: float, rooms_max: fl
     page_url = _search_url(city_id, rooms_min, rooms_max, price_max, prop_code, page)
     try:
         resp = session.get(page_url, timeout=20)
-        logger.debug("Yad2 HTML page %d: status %d url %s", page, resp.status_code, resp.url)
+        logger.info("Yad2 HTML page %d: HTTP %d final_url=%s", page, resp.status_code, resp.url)
         if resp.status_code == 200:
-            next_data = _extract_next_data(resp.text)
-            if next_data:
+            has_next = "__NEXT_DATA__" in resp.text
+            logger.info("Yad2 HTML page %d: __NEXT_DATA__ present=%s body_len=%d", page, has_next, len(resp.text))
+            if has_next:
+                next_data = _extract_next_data(resp.text)
                 items = _items_from_next_data(next_data)
+                logger.info("Yad2 HTML page %d: extracted %d items from __NEXT_DATA__", page, len(items))
                 if items:
                     return items
-                logger.debug("__NEXT_DATA__ found but no items in known paths")
             else:
-                logger.debug("No __NEXT_DATA__ in HTML response")
+                # Probably a CAPTCHA/bot-check page — log a snippet
+                logger.warning("Yad2 HTML page %d: no __NEXT_DATA__ — snippet: %s", page, resp.text[:300])
     except Exception as exc:
         logger.warning("Yad2 HTML fetch failed page %d: %s", page, exc)
 
@@ -236,13 +239,15 @@ def _fetch_page_sync(session: Any, city_id: str, rooms_min: float, rooms_max: fl
     api_url = _api_url(city_id, rooms_min, rooms_max, price_max, prop_code, page)
     try:
         resp = session.get(api_url, headers=_API_HEADERS, timeout=15)
-        logger.debug("Yad2 API page %d: status %d", page, resp.status_code)
+        logger.info("Yad2 API page %d: HTTP %d", page, resp.status_code)
         if resp.status_code == 200:
             feed = resp.json().get("data", {}).get("feed", {})
             items = feed.get("feed_items", [])
+            logger.info("Yad2 API page %d: feed_items=%d", page, len(items))
             if items:
                 return items
-            logger.debug("Yad2 API returned 200 but no feed_items")
+        else:
+            logger.warning("Yad2 API page %d: non-200 body: %s", page, resp.text[:200])
     except Exception as exc:
         logger.warning("Yad2 API fetch failed page %d: %s", page, exc)
 
@@ -279,11 +284,14 @@ class Yad2Adapter(ListingAdapter):
 
         settings = get_settings()
         if settings.yad2_email and settings.yad2_password:
+            logger.info("Yad2: logging in as %s", settings.yad2_email)
             ok = await loop.run_in_executor(
                 None, _login, session, settings.yad2_email, settings.yad2_password
             )
             if not ok:
                 logger.warning("Yad2 login failed — continuing as anonymous")
+        else:
+            logger.info("Yad2: no credentials configured, scraping anonymously")
 
         all_listings: list[RawListing] = []
 
