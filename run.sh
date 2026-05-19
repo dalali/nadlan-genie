@@ -21,7 +21,7 @@ Commands:
   test          Run the backend test suite inside a one-off container
   psql          Open a psql shell on the Postgres container
   shell         Open a bash shell on the backend container
-  scan          Run a scan: ./run.sh scan [city] [rooms_min] [rooms_max] [price_max] [threshold]
+  scan          Run a scan: ./run.sh scan [city] [rooms_min] [rooms_max] [price_max] [threshold] [raw]
   import        Import a transaction CSV: ./run.sh import /path/to/file.csv
   clean         Stop services and delete all volumes (wipes DB)
   help          Show this message
@@ -142,6 +142,7 @@ cmd_scan() {
   local rooms_max="${3:-4}"
   local price_max="${4:-3000000}"
   local threshold="${5:-0.2}"
+  local raw="${6:-}"   # pass "raw" as 6th arg to dump all scraped listings
 
   require_running
   local url
@@ -151,8 +152,14 @@ cmd_scan() {
   echo "→ Scanning: $city | rooms ${rooms_min}-${rooms_max} | max ₪${price_fmt} | ${threshold} discount threshold…"
   echo ""
 
+  # raw mode: override threshold to 0 so everything qualifies
+  local api_threshold="$threshold"
+  if [ "$raw" = "raw" ]; then
+    api_threshold="0.0"
+  fi
+
   local body
-  body=$(python3 -c "import json; print(json.dumps({'city':'$city','rooms_min':$rooms_min,'rooms_max':$rooms_max,'price_max':$price_max,'max_pages':3,'discount_threshold':$threshold}))")
+  body=$(python3 -c "import json; print(json.dumps({'city':'$city','rooms_min':$rooms_min,'rooms_max':$rooms_max,'price_max':$price_max,'max_pages':3,'discount_threshold':$api_threshold}))")
 
   local scan_id
   scan_id=$(curl -sf -X POST "$url" \
@@ -184,35 +191,54 @@ cmd_scan() {
   curl -sf "$(backend_url)/scan/$scan_id" | python3 -c "
 import sys, json
 
+RAW_MODE = '${raw}' == 'raw'
+
 data = json.load(sys.stdin)
 results = data.get('results', [])
 skipped = data.get('skipped', [])
+total   = len(results) + len(skipped)
 
-if not results:
-    print('No qualifying listings found.')
-    if skipped:
-        reasons = {}
-        for s in skipped:
-            reasons[s['reason']] = reasons.get(s['reason'], 0) + 1
-        for reason, count in sorted(reasons.items()):
-            print(f'  {count} listing(s) skipped: {reason}')
+print(f'Scraped: {total} listing(s)  |  qualifying: {len(results)}  |  skipped: {len(skipped)}')
+if data.get('error_msg'):
+    print(f'Error: {data[\"error_msg\"]}')
+print()
+
+if total == 0:
+    print('No listings were scraped — adapter returned nothing (Yad2 may be blocking this IP).')
     sys.exit(0)
 
-print(f'Found {len(results)} qualifying deal(s):')
-print()
-for r in results:
+def print_result(rank, r):
     l = r.get('listing', {})
-    asking  = r.get('asking_price', 0)
-    sqm     = l.get('sqm') or 1
-    print(f'  #{r[\"rank\"]}  {l.get(\"address\", \"N/A\")}')
+    asking = r.get('asking_price', 0)
+    sqm    = l.get('sqm') or 1
+    disc   = r.get('discount_percent', 0) * 100
+    flag   = f'#{rank}' if disc >= 0 else f'#{rank} OVERPRICED'
+    print(f'  {flag}  {l.get(\"address\", \"N/A\")}')
     print(f'  Asking   : ₪{asking:,.0f}  ({sqm} m²  {l.get(\"rooms\", \"?\")} rooms)')
     print(f'  ₪/m²     : asking {asking/sqm:,.0f}  vs  market {r.get(\"median_ppsqm\", 0):,.0f}')
     print(f'  Est value: ₪{r.get(\"estimated_value\", 0):,.0f}')
-    print(f'  Discount : {r.get(\"discount_percent\", 0) * 100:.1f}%')
+    print(f'  Discount : {disc:.1f}%')
     print(f'  Confidence: {r.get(\"confidence\", \"?\")}  ({r.get(\"comparable_count\", \"?\")} comparables)')
     print(f'  URL      : {l.get(\"url\", \"N/A\")}')
     print()
-"
+
+if results:
+    print(f'--- QUALIFYING DEALS ---')
+    print()
+    for r in results:
+        print_result(r['rank'], r)
+
+if skipped:
+    reasons = {}
+    for s in skipped:
+        reasons.setdefault(s['reason'], []).append(s.get('url',''))
+    print(f'--- SKIPPED ---')
+    for reason, urls in sorted(reasons.items()):
+        print(f'  {reason} ({len(urls)}):')
+        for u in urls:
+            print(f'    {u}')
+    print()
+" RAW_MODE="$raw"
 }
 
 cmd_import() {
