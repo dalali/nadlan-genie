@@ -1,12 +1,18 @@
-"""Yad2 adapter — fetches live listings from Yad2's undocumented JSON API.
+"""Yad2 adapter — scrapes live listings from Yad2.
 
-Uses plain `requests` (no Playwright). Set LISTING_SOURCE=yad2 to activate.
-Rate limiting between pages is controlled by SCRAPE_RATE_LIMIT_S (default 3 s).
+Strategy (tried in order per page):
+  1. Parse __NEXT_DATA__ JSON embedded in the search results HTML page.
+  2. Fall back to the gw.yad2.co.il JSON API with session cookies.
+
+Uses a persistent requests.Session so cookies are carried across requests,
+which is required to avoid bot detection. Set LISTING_SOURCE=yad2 to activate.
 """
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
+import re
 from typing import Any
 
 from ..config import get_settings
@@ -18,7 +24,6 @@ logger = logging.getLogger(__name__)
 # City ID mapping (Yad2 numeric IDs)
 # ---------------------------------------------------------------------------
 CITY_IDS: dict[str, str] = {
-    # Hebrew names
     "תל אביב": "5000",
     "ירושלים": "3000",
     "חיפה": "4000",
@@ -37,7 +42,6 @@ CITY_IDS: dict[str, str] = {
     "כפר סבא": "7100",
     "רעננה": "8200",
     "מודיעין": "7900",
-    # English transliterations
     "tel aviv": "5000",
     "jerusalem": "3000",
     "haifa": "4000",
@@ -45,7 +49,7 @@ CITY_IDS: dict[str, str] = {
     "petah tikva": "7900",
     "rishon lezion": "8300",
     "netanya": "7400",
-    "beer sheva": "8200",  # note: IDs are approximate per spec
+    "beer sheva": "1100",
     "ashdod": "70",
     "holon": "6200",
     "bat yam": "6100",
@@ -58,9 +62,6 @@ CITY_IDS: dict[str, str] = {
     "modiin": "7900",
 }
 
-# ---------------------------------------------------------------------------
-# Property type mapping
-# ---------------------------------------------------------------------------
 PROPERTY_TYPE_MAP: dict[str, str] = {
     "apartment": "1",
     "דירה": "1",
@@ -70,59 +71,157 @@ PROPERTY_TYPE_MAP: dict[str, str] = {
     "villa": "4",
 }
 
-# ---------------------------------------------------------------------------
-# HTTP headers to avoid immediate 403
-# ---------------------------------------------------------------------------
-_HEADERS: dict[str, str] = {
+# Browser-realistic headers for page requests
+_PAGE_HEADERS: dict[str, str] = {
     "User-Agent": (
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
         "AppleWebKit/537.36 (KHTML, like Gecko) "
         "Chrome/124.0.0.0 Safari/537.36"
     ),
-    "Accept": "application/json, text/plain, */*",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
     "Accept-Language": "he-IL,he;q=0.9,en-US;q=0.8,en;q=0.7",
-    "Referer": "https://www.yad2.co.il/",
-    "Origin": "https://www.yad2.co.il",
+    "Accept-Encoding": "gzip, deflate, br",
+    "Connection": "keep-alive",
+    "Upgrade-Insecure-Requests": "1",
+    "Sec-Fetch-Dest": "document",
+    "Sec-Fetch-Mode": "navigate",
+    "Sec-Fetch-Site": "none",
+    "sec-ch-ua": '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"',
+    "sec-ch-ua-mobile": "?0",
+    "sec-ch-ua-platform": '"macOS"',
 }
 
-# ---------------------------------------------------------------------------
-# Lazy import of requests so the module still loads when requests is absent
-# ---------------------------------------------------------------------------
+# Headers for JSON API calls (after session is warmed up)
+_API_HEADERS: dict[str, str] = {
+    **_PAGE_HEADERS,
+    "Accept": "application/json, text/plain, */*",
+    "Referer": "https://www.yad2.co.il/",
+    "Origin": "https://www.yad2.co.il",
+    "Sec-Fetch-Dest": "empty",
+    "Sec-Fetch-Mode": "cors",
+    "Sec-Fetch-Site": "same-site",
+}
+
 try:
     import requests as _requests
-    import requests.exceptions as _req_exc
-
     _REQUESTS_AVAILABLE = True
 except ImportError:  # pragma: no cover
     _requests = None  # type: ignore[assignment]
-    _req_exc = None  # type: ignore[assignment]
     _REQUESTS_AVAILABLE = False
 
 
-def _fetch_page(url: str, params: dict[str, str]) -> dict[str, Any]:
-    """Synchronous HTTP GET; returns parsed JSON or raises requests.exceptions.*."""
-    if not _REQUESTS_AVAILABLE:
-        raise RuntimeError(
-            "The 'requests' package is not installed. "
-            "Run `pip install requests` or add it to requirements.txt."
-        )
-    response = _requests.get(url, params=params, headers=_HEADERS, timeout=15)
-    response.raise_for_status()
-    return response.json()  # type: ignore[no-any-return]
+def _make_session() -> Any:
+    session = _requests.Session()
+    session.headers.update(_PAGE_HEADERS)
+    return session
+
+
+def _warm_session(session: Any) -> None:
+    """Visit the Yad2 homepage to acquire session cookies."""
+    try:
+        session.get("https://www.yad2.co.il/", timeout=15)
+        logger.debug("Yad2 session warmed up, cookies: %s", list(session.cookies.keys()))
+    except Exception as exc:
+        logger.warning("Yad2 session warmup failed (continuing anyway): %s", exc)
+
+
+def _search_url(city_id: str, rooms_min: float, rooms_max: float,
+                price_max: int, prop_code: str, page: int) -> str:
+    return (
+        f"https://www.yad2.co.il/realestate/forsale"
+        f"?city={city_id}&rooms={rooms_min}-{rooms_max}"
+        f"&price=0-{price_max}&property={prop_code}&page={page}"
+    )
+
+
+def _api_url(city_id: str, rooms_min: float, rooms_max: float,
+             price_max: int, prop_code: str, page: int) -> str:
+    return (
+        f"https://gw.yad2.co.il/feed-search-legacy/realestate/forsale"
+        f"?city={city_id}&rooms={rooms_min}-{rooms_max}"
+        f"&price=0-{price_max}&property={prop_code}&forceLdLoad=1&page={page}"
+    )
+
+
+def _extract_next_data(html: str) -> dict[str, Any]:
+    """Pull the __NEXT_DATA__ JSON blob from a Next.js page."""
+    m = re.search(
+        r'<script[^>]+id=["\']__NEXT_DATA__["\'][^>]*>(.*?)</script>',
+        html, re.S
+    )
+    if not m:
+        return {}
+    try:
+        return json.loads(m.group(1))
+    except json.JSONDecodeError:
+        return {}
+
+
+def _items_from_next_data(data: dict[str, Any]) -> list[dict[str, Any]]:
+    """Navigate __NEXT_DATA__ to find feed_items. Yad2's structure varies."""
+    paths = [
+        ["props", "pageProps", "feed", "feed_items"],
+        ["props", "pageProps", "initialData", "feed", "feed_items"],
+        ["props", "pageProps", "data", "feed", "feed_items"],
+        ["props", "pageProps", "listings"],
+    ]
+    for path in paths:
+        node = data
+        for key in path:
+            if not isinstance(node, dict):
+                break
+            node = node.get(key)  # type: ignore[assignment]
+        if isinstance(node, list) and node:
+            logger.debug("Found %d items via __NEXT_DATA__ path: %s", len(node), path)
+            return node
+    return []
+
+
+def _fetch_page_sync(session: Any, city_id: str, rooms_min: float, rooms_max: float,
+                     price_max: int, prop_code: str, page: int) -> list[dict[str, Any]]:
+    """Fetch one page of listings. Tries HTML __NEXT_DATA__ then JSON API."""
+
+    # Strategy 1: parse __NEXT_DATA__ from the search results HTML
+    page_url = _search_url(city_id, rooms_min, rooms_max, price_max, prop_code, page)
+    try:
+        resp = session.get(page_url, timeout=20)
+        logger.debug("Yad2 HTML page %d: status %d url %s", page, resp.status_code, resp.url)
+        if resp.status_code == 200:
+            next_data = _extract_next_data(resp.text)
+            if next_data:
+                items = _items_from_next_data(next_data)
+                if items:
+                    return items
+                logger.debug("__NEXT_DATA__ found but no items in known paths")
+            else:
+                logger.debug("No __NEXT_DATA__ in HTML response")
+    except Exception as exc:
+        logger.warning("Yad2 HTML fetch failed page %d: %s", page, exc)
+
+    # Strategy 2: JSON API with session cookies
+    api_url = _api_url(city_id, rooms_min, rooms_max, price_max, prop_code, page)
+    try:
+        resp = session.get(api_url, headers=_API_HEADERS, timeout=15)
+        logger.debug("Yad2 API page %d: status %d", page, resp.status_code)
+        if resp.status_code == 200:
+            feed = resp.json().get("data", {}).get("feed", {})
+            items = feed.get("feed_items", [])
+            if items:
+                return items
+            logger.debug("Yad2 API returned 200 but no feed_items")
+    except Exception as exc:
+        logger.warning("Yad2 API fetch failed page %d: %s", page, exc)
+
+    return []
 
 
 class Yad2Adapter(ListingAdapter):
-    """Adapter that queries the Yad2 feed-search-legacy JSON API."""
-
     name = "yad2"
-    BASE_URL = "https://gw.yad2.co.il/feed-search-legacy/realestate/forsale"
 
     def __init__(self, rate_limit_s: float | None = None) -> None:
-        self._rate_limit_s = rate_limit_s if rate_limit_s is not None else get_settings().scrape_rate_limit_s
-
-    # ------------------------------------------------------------------
-    # Public interface
-    # ------------------------------------------------------------------
+        self._rate_limit_s = (
+            rate_limit_s if rate_limit_s is not None else get_settings().scrape_rate_limit_s
+        )
 
     async def search(
         self,
@@ -133,71 +232,46 @@ class Yad2Adapter(ListingAdapter):
         max_pages: int,
         property_type: str,
     ) -> list[RawListing]:
-        """Fetch listings from Yad2, paginating up to *max_pages* pages.
+        if not _REQUESTS_AVAILABLE:
+            raise RuntimeError("'requests' package is not installed.")
 
-        Raises:
-            ValueError: if *city* is not in the known city-ID mapping.
-        """
         city_id = self._resolve_city_id(city)
         prop_code = PROPERTY_TYPE_MAP.get(property_type.lower(), "1")
-
-        base_params: dict[str, str] = {
-            "city": city_id,
-            "rooms": f"{rooms_min}-{rooms_max}",
-            "price": f"0-{price_max}",
-            "forceLdLoad": "1",
-            "property": prop_code,
-        }
-
-        all_listings: list[RawListing] = []
         loop = asyncio.get_event_loop()
 
-        for page_num in range(1, max_pages + 1):
-            params = {**base_params, "page": str(page_num)}
+        # Warm up session in thread pool (blocking I/O)
+        session = await loop.run_in_executor(None, _make_session)
+        await loop.run_in_executor(None, _warm_session, session)
 
-            try:
-                data: dict[str, Any] = await loop.run_in_executor(
-                    None, _fetch_page, self.BASE_URL, params
-                )
-            except Exception as exc:
-                logger.warning(
-                    "Yad2 API request failed on page %d: %s", page_num, exc
-                )
+        all_listings: list[RawListing] = []
+
+        for page_num in range(1, max_pages + 1):
+            items: list[dict[str, Any]] = await loop.run_in_executor(
+                None, _fetch_page_sync,
+                session, city_id, rooms_min, rooms_max, price_max, prop_code, page_num
+            )
+
+            if not items:
+                logger.warning("Yad2: no items on page %d — stopping", page_num)
                 break
 
-            feed = data.get("data", {}).get("feed", {})
-            feed_items: list[dict[str, Any]] = feed.get("feed_items", [])
-            total_pages: int = int(feed.get("total_pages", 1))
-
-            for item in feed_items:
+            for item in items:
                 listing = self._parse_item(item, city)
                 if listing is not None:
                     all_listings.append(listing)
 
-            logger.debug(
-                "Yad2 page %d/%d — fetched %d items (total so far: %d)",
-                page_num,
-                total_pages,
-                len(feed_items),
-                len(all_listings),
+            logger.info(
+                "Yad2 page %d — got %d items, total so far: %d",
+                page_num, len(items), len(all_listings)
             )
 
-            if page_num >= total_pages:
-                break
-
-            # Rate-limit between pages (not after the last page)
-            await asyncio.sleep(self._rate_limit_s)
+            if page_num < max_pages:
+                await asyncio.sleep(self._rate_limit_s)
 
         return all_listings
 
-    # ------------------------------------------------------------------
-    # Helpers
-    # ------------------------------------------------------------------
-
     def _resolve_city_id(self, city: str) -> str:
-        """Return the Yad2 numeric city ID, or raise ValueError."""
         key = city.strip().lower()
-        # Try case-insensitive lookup first
         city_id = CITY_IDS.get(key) or CITY_IDS.get(city.strip())
         if city_id is None:
             raise ValueError(
@@ -208,15 +282,10 @@ class Yad2Adapter(ListingAdapter):
 
     @staticmethod
     def _parse_item(item: dict[str, Any], city: str) -> RawListing | None:
-        """Convert a single feed_item dict to RawListing; return None if critical fields missing."""
         price = item.get("price")
         sqm = item.get("square_meters")
-
         if not price or not sqm:
-            logger.debug(
-                "Skipping Yad2 item %s — missing price or sqm",
-                item.get("id", "<no-id>"),
-            )
+            logger.debug("Skipping item %s — missing price or sqm", item.get("id", "?"))
             return None
 
         listing_id = str(item.get("id", ""))
